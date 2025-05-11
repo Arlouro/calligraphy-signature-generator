@@ -1,0 +1,118 @@
+body {
+  margin: 0;
+  background-color: #3C1722;
+  font-family: 'Fredoka', sans-serif;
+  color: #EFBF6A;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: start;
+  height: 100vh;
+  overflow: hidden;
+  padding-top: 50px;
+}
+
+.logo {
+  margin-top: 10vh;
+  max-width: 300px;
+  height: auto;
+}
+
+.input-name {
+  margin-top: 5vh;
+  width: 50%;
+  padding: 15px;
+  font-size: 20px;
+  color: #3C1722;
+  background-color: white;
+  border: 2px solid #3C1722;
+  border-radius: 8px;
+  outline: none;
+}
+
+.input-name:focus {
+  border-color: #EFBF6A;
+}
+
+.slider-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.chackbox{
+    width:100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 2vh;
+    margin-bottom: 2vh;
+}
+
+.container {
+  display: block;
+  position: relative;
+  cursor: pointer;
+  font-size: 22px;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+    height: 25px;
+  width: 25px;
+  user-select: none;
+}
+
+.container input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  background-color: white;
+}
+
+.checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 25px;
+  width: 25px;
+  background-color: white;
+}
+
+.container:hover input ~ .checkmark {
+  background-color: 'white';
+}
+
+.container input:checked ~ .checkmark {
+  background-color: #EFBF6A;
+}
+
+.container input:checked ~ .checkmark:after {
+  display: block;
+}
+
+.container .checkmark:after {
+ 	top: 9px;
+	left: 9px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: white;
+}
+
+
+.input-description {
+  margin-top: 1vh;
+  width: 30%;
+  padding: 12px;
+  font-size: 15px;
+  color: #3C1722;
+  background-color: white;
+  border: 2px solid #3C1722;
+  border-radius: 8px;
+  outline: none;
+}
+
+.input-description:focus {
+  border-color: #EFBF6A;
+}
+
