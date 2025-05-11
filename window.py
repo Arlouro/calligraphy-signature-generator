@@ -25,13 +25,20 @@ fundo = Image.new("RGBA", imagem_redimensionada.size, "#3C1722")
 imagem_sem_transparencia = Image.alpha_composite(fundo, imagem_redimensionada)
 imagem_tk = ImageTk.PhotoImage(imagem_sem_transparencia)
 
-label = tk.Label(window, image=imagem_tk, bg='#3C1722')
-label.place(relx=0.5, rely=0.2, anchor='center')  
+logo = tk.Label(window, image=imagem_tk, bg='#3C1722')
+logo.place(relx=0.5, rely=0.2, anchor='center')  
 
 
 name = tk.Entry(window, width=50, font=("Fredoka", 20), bg='white', fg='#3C1722', relief="flat", highlightthickness=2, highlightbackground="#3C1722", highlightcolor="#EFBF6A")
 name.pack(pady=10)
 name.place(relx=0.5, rely=0.3, anchor='center')  
+
+
+ldescription = tk.Label(window, text="Description", font=("Fredoka", 15), bg="#3C1722", fg="#EFBF6A")
+ldescription.place(relx=0.5, rely=0.56, anchor="center") 
+description = tk.Entry(window, width=30, font=("Fredoka", 15), bg='white', fg='#3C1722', relief="flat", highlightthickness=2, highlightbackground="#3C1722", highlightcolor="#EFBF6A")
+description.pack(pady=10)
+description.place(relx=0.5, rely=0.6, anchor='center')  
 
 
 window.mainloop()
