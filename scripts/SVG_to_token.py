@@ -2,8 +2,6 @@ import re
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from bs4 import BeautifulSoup
-
 
 def normalize_coords(coords, width=400, height=200):
     norm = []
