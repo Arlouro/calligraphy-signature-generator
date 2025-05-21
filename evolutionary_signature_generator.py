@@ -17,6 +17,11 @@ FONT_PATH = "fonts/Bastliga One.ttf"
 MODEL_ID = "doctors-handwritten-recognition/2"
 API_KEY = "tSOyBot6l990FV1g9HRI"
 
+POPULATION = 100
+GENERATIONS = 50
+MUTATION = 0.5
+TOURNAMENT = 3
+
 # ==== UTILITY FUNCTIONS ====
 def svg_to_image(svg_str):
     try:
@@ -25,7 +30,7 @@ def svg_to_image(svg_str):
         raise ImportError("cairosvg is required for SVG to image conversion. Please install it with 'pip install cairosvg'.")
 
     try:
-        png_data = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), output_width=500, output_height=200)
+        png_data = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), output_width=800, output_height=800)
         image = Image.open(BytesIO(png_data)).convert("RGBA")
         background = Image.new("RGBA", image.size, (255, 255, 255, 255))
         image = Image.alpha_composite(background, image)
@@ -85,7 +90,6 @@ def generate_from_font(name, font_path=FONT_PATH, font_size=100):
 # ==== FITNESS EVALUATION ====
 def calculate_fitness(chromosome):
     def stroke_fluidity():
-        """Measures how fluid the strokes appear"""
         angles = []
         for letter in chromosome:
             for i in range(len(letter) - 2):
@@ -100,7 +104,6 @@ def calculate_fitness(chromosome):
         return 1.0 - (np.mean(angles)/math.pi if angles else 0.5)
     
     def stroke_consistency():
-        """Measures consistency of stroke widths and spacing"""
         if len(chromosome) < 2:
             return 0.5
             
@@ -125,7 +128,6 @@ def calculate_fitness(chromosome):
         return 1.0 - (width_std + height_std)/2
     
     def signature_balance():
-        """Measures overall visual balance of the signature"""
         all_points = [point for letter in chromosome for point in letter]
         if not all_points:
             return 0.5
@@ -139,7 +141,6 @@ def calculate_fitness(chromosome):
         return 1.0 - normalized_distance
     
     def continuity_score():
-        """Measures how continuous the strokes are"""
         continuity = 0
         for letter in chromosome:
             if len(letter) < 2:
@@ -176,40 +177,36 @@ def is_legible(svg, name):
 class SignatureGenerator:
     def __init__(self, name):
         self.name = name
-        self.population_size = 60
-        self.generations = 5
-        self.mutation_rate = 0.5
+        self.population_size = POPULATION
+        self.generations = GENERATIONS
+        self.mutation_rate = MUTATION
+        self.tournament_k = TOURNAMENT
         self.fitness_history = []
         self.population = []
         self.best_chrom = None
         self.best_fit = -float('inf')
         self.base_chromosome = generate_from_font(self.name)
-        self.tournament_k = 3
 
 
     def mutate(self, chrom):
         mutated = []
-        slant_angle = random.gauss(0, 0.12)  # radians, subtle slant
+        slant_angle = random.gauss(0, 0.12)
         baseline_shift = random.gauss(0, 2.5)
         for letter in chrom:
             new_letter = []
             for i, (x, y) in enumerate(letter):
                 mutation_factor = 1 - (i / len(letter))
-                # Smooth noise for more natural curves
                 dx = random.gauss(0, 0.7) * mutation_factor * 1.2
                 dy = random.gauss(0, 0.7) * mutation_factor * 1.2
-                # Apply slant and baseline
                 nx = x + dx + (y * math.tan(slant_angle))
                 ny = y + dy + baseline_shift
                 new_letter.append((nx, ny))
             mutated.append(new_letter)
         return mutated
     
-    def tournament_selection(self, k=3):
-        participants = random.sample(list(zip(self.population, [calculate_fitness(ind) for ind in self.population])), k)
-        winner = max(participants, key=lambda x: x[1])
-        return winner[0]
-
+    def tournament_selection(self, fitness_scores, k=3):
+        participants = random.sample(fitness_scores, k)
+        return max(participants, key=lambda x: x[1])[0]
 
     def crossover(self, p1, p2):
         if len(p1) < 2 or len(p2) < 2:
@@ -224,7 +221,6 @@ class SignatureGenerator:
         gens = additional_generations if additional_generations is not None else self.generations
         for gen in range(gens):
             gen_num = len(self.fitness_history)
-            self.mutation_rate = max(0.05, 0.2 * (1 - gen_num / (self.generations + 100)))  # Dynamic adjustment
 
             scores = [calculate_fitness(ind) for ind in self.population]
             avg_fit = sum(scores) / len(scores)
@@ -234,9 +230,10 @@ class SignatureGenerator:
             elite_indices = np.argsort(scores)[-elite_size:]
             new_pop = [self.population[i] for i in elite_indices]
 
+            fitness_scores = list(zip(self.population, scores))
             while len(new_pop) < self.population_size:
-                p1 = self.tournament_selection(k=self.tournament_k)
-                p2 = self.tournament_selection(k=self.tournament_k)
+                p1 = self.tournament_selection(fitness_scores, k=self.tournament_k)
+                p2 = self.tournament_selection(fitness_scores, k=self.tournament_k)
                 child = self.crossover(p1, p2)
                 if random.random() < self.mutation_rate:
                     child = self.mutate(child)
@@ -272,10 +269,8 @@ class SignatureGenerator:
             for c1, c2, end in catmull_rom_to_bezier(letter):
                 d.append(f"C {c1[0]:.2f},{c1[1]:.2f} {c2[0]:.2f},{c2[1]:.2f} {end[0]:.2f},{end[1]:.2f}")
             path.set('d', ' '.join(d))
-            # Add subtle shadow effect
             path.set('filter', 'url(#shadow)')
         
-        # Add SVG filter for subtle shadow
         defs = ET.SubElement(svg, 'defs')
         shadow = ET.SubElement(defs, 'filter', id="shadow", x="-20%", y="-20%", width="140%", height="140%")
         ET.SubElement(shadow, 'feGaussianBlur', stdDeviation="2")
@@ -309,7 +304,7 @@ if __name__ == "__main__":
 
     for attempt in range(10):
         print(f"\n🧬 Attempt {attempt+1}...")
-        svg, chrom = gen.evolve(additional_generations=30)
+        svg, chrom = gen.evolve(GENERATIONS)
         valid, img = is_legible(svg, name)
 
         if valid:
