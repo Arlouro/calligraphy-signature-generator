@@ -19,12 +19,19 @@ API_KEY = "tSOyBot6l990FV1g9HRI"
 
 # ==== UTILITY FUNCTIONS ====
 def svg_to_image(svg_str):
-    import cairosvg
-    png_data = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), output_width=500, output_height=200)
-    image = Image.open(BytesIO(png_data)).convert("RGBA")
-    background = Image.new("RGBA", image.size, (255, 255, 255, 255))
-    image = Image.alpha_composite(background, image)
-    return image.convert("RGB")
+    try:
+        import cairosvg
+    except ImportError:
+        raise ImportError("cairosvg is required for SVG to image conversion. Please install it with 'pip install cairosvg'.")
+
+    try:
+        png_data = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), output_width=500, output_height=200)
+        image = Image.open(BytesIO(png_data)).convert("RGBA")
+        background = Image.new("RGBA", image.size, (255, 255, 255, 255))
+        image = Image.alpha_composite(background, image)
+        return image.convert("RGB")
+    except Exception as e:
+        raise RuntimeError(f"Failed to convert SVG to image: {e}")
 
 def save_temp_image(image, directory="tmp"):
     os.makedirs(directory, exist_ok=True)
@@ -66,7 +73,7 @@ def generate_from_font(name, font_path=FONT_PATH, font_size=100):
         for cmd, pts in recording_pen.value:
             for pt in pts:
                 x = pt[0] * (font_size / 1000.0) + x_cursor
-                y = pt[1] * (font_size / 1000.0)
+                y = -pt[1] * (font_size / 1000.0) + font_size
                 points.append((x, y))
 
         if points:
@@ -169,23 +176,40 @@ def is_legible(svg, name):
 class SignatureGenerator:
     def __init__(self, name):
         self.name = name
-        self.population_size = 30
-        self.generations = 200
-        self.mutation_rate = 0.2
+        self.population_size = 60
+        self.generations = 5
+        self.mutation_rate = 0.5
         self.fitness_history = []
+        self.population = []
+        self.best_chrom = None
+        self.best_fit = -float('inf')
+        self.base_chromosome = generate_from_font(self.name)
+        self.tournament_k = 3
+
 
     def mutate(self, chrom):
         mutated = []
+        slant_angle = random.gauss(0, 0.12)  # radians, subtle slant
+        baseline_shift = random.gauss(0, 2.5)
         for letter in chrom:
             new_letter = []
             for i, (x, y) in enumerate(letter):
-                # More controlled mutation with diminishing effect
-                mutation_factor = 1 - (i / len(letter))  # Reduce mutation toward end of stroke
-                nx = x + random.gauss(0, 1) * mutation_factor * 1.2
-                ny = y + random.gauss(0, 1) * mutation_factor * 1.2
+                mutation_factor = 1 - (i / len(letter))
+                # Smooth noise for more natural curves
+                dx = random.gauss(0, 0.7) * mutation_factor * 1.2
+                dy = random.gauss(0, 0.7) * mutation_factor * 1.2
+                # Apply slant and baseline
+                nx = x + dx + (y * math.tan(slant_angle))
+                ny = y + dy + baseline_shift
                 new_letter.append((nx, ny))
             mutated.append(new_letter)
         return mutated
+    
+    def tournament_selection(self, k=3):
+        participants = random.sample(list(zip(self.population, [calculate_fitness(ind) for ind in self.population])), k)
+        winner = max(participants, key=lambda x: x[1])
+        return winner[0]
+
 
     def crossover(self, p1, p2):
         if len(p1) < 2 or len(p2) < 2:
@@ -193,45 +217,41 @@ class SignatureGenerator:
         cut = random.randint(1, min(len(p1), len(p2)) - 1)
         return p1[:cut] + p2[cut:]
 
-    def evolve(self):
-        base_chromosome = generate_from_font(self.name)
-        population = [self.mutate(base_chromosome) for _ in range(self.population_size)]
-        best, best_fit = None, -float('inf')
+    def evolve(self, additional_generations=None):
+        if not self.population:
+            self.population = [self.mutate(self.base_chromosome) for _ in range(self.population_size)]
         
-        for gen in range(self.generations):
-            # Dynamic mutation rate - decreases over generations
-            self.mutation_rate = max(0.05, 0.2 * (1 - gen/self.generations))
-            
-            scores = [calculate_fitness(ind) for ind in population]
+        gens = additional_generations if additional_generations is not None else self.generations
+        for gen in range(gens):
+            gen_num = len(self.fitness_history)
+            self.mutation_rate = max(0.05, 0.2 * (1 - gen_num / (self.generations + 100)))  # Dynamic adjustment
+
+            scores = [calculate_fitness(ind) for ind in self.population]
             avg_fit = sum(scores) / len(scores)
             self.fitness_history.append(avg_fit)
-            
-            # Elitism - keep top 10% unchanged
+
             elite_size = max(1, int(self.population_size * 0.1))
             elite_indices = np.argsort(scores)[-elite_size:]
-            new_pop = [population[i] for i in elite_indices]
-            
+            new_pop = [self.population[i] for i in elite_indices]
+
             while len(new_pop) < self.population_size:
-                # Tournament selection
-                candidates = random.sample(list(zip(population, scores)), k=3)
-                p1 = max(candidates, key=lambda x: x[1])[0]
-                candidates = random.sample(list(zip(population, scores)), k=3)
-                p2 = max(candidates, key=lambda x: x[1])[0]
-                
+                p1 = self.tournament_selection(k=self.tournament_k)
+                p2 = self.tournament_selection(k=self.tournament_k)
                 child = self.crossover(p1, p2)
                 if random.random() < self.mutation_rate:
                     child = self.mutate(child)
                 new_pop.append(child)
-            
-            population = new_pop
-            current_best = max(zip(population, scores), key=lambda x: x[1])
-            if current_best[1] > best_fit:
-                best, best_fit = current_best
-            
-            print(f"Gen {gen:03} | Best Fit: {best_fit:.4f} | Avg: {avg_fit:.4f} | Mut Rate: {self.mutation_rate:.2f}")
-        
-        svg = self.chromosome_to_svg(best)
-        return svg, best
+
+            self.population = new_pop
+            current_best = max(zip(self.population, scores), key=lambda x: x[1])
+            if current_best[1] > self.best_fit:
+                self.best_chrom, self.best_fit = current_best
+
+            print(f"Gen {gen_num:03} | Best Fit: {self.best_fit:.4f} | Avg: {avg_fit:.4f} | Mut Rate: {self.mutation_rate:.2f}")
+
+        svg = self.chromosome_to_svg(self.best_chrom)
+        return svg, self.best_chrom
+
 
     def chromosome_to_svg(self, chromosome):
         svg = ET.Element('svg', xmlns="http://www.w3.org/2000/svg", 
@@ -289,7 +309,7 @@ if __name__ == "__main__":
 
     for attempt in range(10):
         print(f"\n🧬 Attempt {attempt+1}...")
-        svg, chrom = gen.evolve()
+        svg, chrom = gen.evolve(additional_generations=30)
         valid, img = is_legible(svg, name)
 
         if valid:
@@ -300,6 +320,6 @@ if __name__ == "__main__":
             break
         else:
             img.save(f"debug_signature_{attempt+1}.png")
-            print("❌ Not legible, retrying...")
+            print("❌ Not legible, evolving further...")
     else:
         print("❗ Failed to evolve a legible signature after 10 attempts.")
